@@ -1,15 +1,12 @@
 package edu.cmu.ds.messagepasser;
 
-import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ConnectException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -31,8 +28,7 @@ import edu.cmu.ds.messagepasser.model.Rule;
 import edu.cmu.ds.messagepasser.model.TimeStampedMessage;
 
 public class MessagePasser {
-	private static final String DEFAULT_CONFIG_FILENAME = "sample.yaml";
-	private static String commandPrompt = ">: ";
+	public static String commandPrompt = ">: ";
 	private String configurationFileName;
 	private String localName;
 	private AtomicInteger sequenceNumber = new AtomicInteger(0);
@@ -141,7 +137,7 @@ public class MessagePasser {
 	 * 
 	 * @return
 	 */
-	private Integer getIncMulticastSequenceNumber() {
+	public Integer getIncMulticastSequenceNumber() {
 		return ++multicastSequenceNumber;
 	}
 
@@ -156,7 +152,7 @@ public class MessagePasser {
 	 * @param message
 	 * @throws IOException
 	 */
-	private void log(Message message) throws IOException {
+	public void log(Message message) throws IOException {
 		Socket socket = null;
 		try {
 			socket = new Socket(loggerIp, loggerPort);
@@ -531,6 +527,7 @@ public class MessagePasser {
 		do {
 			lastDeliveredListSize = deliveredList.size();
 			// Look for messages that satisfy CO-delivery conditions
+			@SuppressWarnings("unchecked")
 			ArrayList<Integer> localTimeStamp = (ArrayList<Integer>) groupClock.getTimeStamp();
 			for (int i = 0; i < holdBackQueue.size(); i++) {
 				// Get only message that hasn't been processed yet
@@ -538,6 +535,7 @@ public class MessagePasser {
 				if (deliveredList.contains(messageInQueue))
 					continue;
 				// Check whether or not message satisfies delivery condition
+				@SuppressWarnings("unchecked")
 				ArrayList<Integer> messageTimeStamp = (ArrayList<Integer>) messageInQueue.getTimeStamp();
 				int j = getProcessIndex(messageInQueue.getMulticasterName());
 				boolean mustDeliver = true;
@@ -714,150 +712,6 @@ public class MessagePasser {
 			e.printStackTrace();
 		}
 		return null;
-	}
-
-	public static void main(String[] args) throws Exception {
-		InputStreamReader reader = new InputStreamReader(System.in);
-		BufferedReader input = new BufferedReader(reader);
-
-		System.out.println("Please enter the local host name");
-		System.out.print(commandPrompt);
-		String localName = input.readLine();
-
-		String clockType;
-		do {
-			System.out.println("Please choose the clock type between 'l' (logical) or 'v' (vector)");
-			System.out.print(commandPrompt);
-			clockType = input.readLine();
-		} while (!"l".equals(clockType) && !"v".equals(clockType));
-
-		MessagePasser messagePasser;
-		while (true) {
-			try {
-				System.out.println("Please enter the configuration file name (blank for default: "
-						+ DEFAULT_CONFIG_FILENAME + ")");
-				System.out.print(commandPrompt);
-				String configurationFileName = input.readLine();
-				if (configurationFileName.length() == 0)
-					configurationFileName = DEFAULT_CONFIG_FILENAME;
-				// Create a MessagePasser instance and start it!
-				messagePasser = new MessagePasser(configurationFileName, localName, "l".equals(clockType));
-				// Modify command prompt display
-				commandPrompt = "\n" + (messagePasser.isUsingLogicalClock() ? "logical " : "vector ") + localName
-						+ commandPrompt;
-				break;
-			} catch (FileNotFoundException e) {
-				System.out.println("Configuration file not found.");
-			}
-		}
-
-		System.out.println("Please enter 'send' or 'exit' or 'mark' or 'multicast' or 'time'");
-		System.out.print(commandPrompt);
-		String command;
-		while ((command = input.readLine()) != null) {
-			if (command.equals("exit")) {
-				/*
-				 * Exit
-				 */
-				break;
-			} else if (command.equals("time")) {
-				/*
-				 * Time - Print current time stamp
-				 */
-				messagePasser.printTimeStamp();
-			} else if (command.equals("send")) {
-				/*
-				 * Send
-				 */
-				// Retrieve message destination and kind
-				String[] sendInfo;
-				do {
-					System.out.println("Please specify the message: <destination> <kind>");
-					System.out.print(commandPrompt);
-					sendInfo = input.readLine().split(" ");
-				} while (sendInfo.length != 2);
-				String destination = sendInfo[0];
-				String kind = sendInfo[1];
-
-				// Retrieve message body
-				System.out.println("Please enter the message body");
-				System.out.print(commandPrompt);
-				String messageBody = input.readLine();
-
-				// Check if the user wants to log
-				String logInfo;
-				do {
-					System.out.println("Do you want log this message? (y/n)");
-					System.out.print(commandPrompt);
-					logInfo = input.readLine();
-				} while (!logInfo.equals("y") && !logInfo.equals("n"));
-				boolean mustLog = (logInfo.toLowerCase().equals("y"));
-
-				// Check destination
-				Integer nodeIndex = messagePasser.getNodeIndex(destination);
-				if (nodeIndex == null && !destination.equals(localName)) {
-					System.out.println("Invalid destination");
-				} else {
-					// Create and send a time stamped message
-					TimeStampedMessage message = new TimeStampedMessage(destination, kind, messageBody);
-
-					// if nodeIndex == null, it means send to itself
-					// socket has been established at the init of messagePasser
-					if (nodeIndex == null)
-						nodeIndex = -1;
-					messagePasser.send(message, nodeIndex, false);
-					if (mustLog) {
-						messagePasser.log(message);
-					}
-				}
-			} else if (command.equals("mark")) {
-				/*
-				 * Mark: send a message only to logger.
-				 */
-				TimeStampedMessage message = new TimeStampedMessage("logger", "log", "Mark");
-				message.setSource(localName);
-				message.setSequenceNumber(Integer.MAX_VALUE);
-				messagePasser.mark(message);
-			} else if (command.equals("multicast")) {
-				/*
-				 * Multicast
-				 */
-				String groupName = null;
-				do {
-					System.out.println("Please specify the group name");
-					System.out.print(commandPrompt);
-					groupName = input.readLine();
-				} while (!messagePasser.getGroupMembers().containsKey(groupName));
-
-				if (!messagePasser.getGroupMembers().get(groupName).contains(localName)) {
-					System.out.println("Couldn't multicast. You are not a member of this group.");
-				} else {
-					String logInfo;
-					do {
-						System.out.println("Do you want log this message? (y/N)");
-						System.out.print(commandPrompt);
-						logInfo = input.readLine();
-					} while (!logInfo.equals("y") && !logInfo.equals("n") && !logInfo.equals(""));
-
-					boolean mustLog = (logInfo.toLowerCase().equals("y"));
-					TimeStampedMessage message = new TimeStampedMessage();
-					message.setSource(localName);
-					message.setMulticastMessageBody(groupName, messagePasser.getIncMulticastSequenceNumber());
-					messagePasser.multicast(groupName, message, true);
-
-					if (mustLog) {
-						message.setDestination(groupName);
-						messagePasser.log(message);
-					}
-				}
-			}
-			System.out.println("-------------------");
-			System.out.println("Please enter 'send' or 'exit' or 'mark' or 'multicast' or 'time'");
-			System.out.print(commandPrompt);
-		}
-		input.close();
-		System.out.println("Program exited normally");
-		System.exit(0);
 	}
 
 }
