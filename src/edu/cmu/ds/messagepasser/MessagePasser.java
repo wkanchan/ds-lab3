@@ -471,11 +471,15 @@ public class MessagePasser {
 					if (meState == MutualExclusionState.HELD || meVoted) {
 						requestQueue.add(message);
 					} else {
-						if (message.getMulticasterName().equals(localName)) {
+						// Send reply to Pi
+						String requester = message.getMulticasterName();
+						if (requester.equals(localName)) {
+							// Pi is self
 							TimeStampedMessage selfReplyMessage = new TimeStampedMessage(message);
 							selfReplyMessage.setMeCommand(MutualExclusionCommand.REPLY);
 							receiveBuffer.add(selfReplyMessage);
 						} else {
+							// Pi is other
 							TimeStampedMessage replyMessage = new TimeStampedMessage(message.getMulticasterName(), "REPLY", "REPLY");
 							replyMessage.setMeCommand(MutualExclusionCommand.REPLY);
 							send(replyMessage, getNodeIndex(message.getMulticasterName()), false);
@@ -490,9 +494,18 @@ public class MessagePasser {
 					if (!requestQueue.isEmpty()) {
 						TimeStampedMessage requestMessage = requestQueue.poll();
 						String requester = requestMessage.getMulticasterName();
-						TimeStampedMessage replyMessage = new TimeStampedMessage(requester, "REPLY", "REPLY");
-						replyMessage.setMeCommand(MutualExclusionCommand.REPLY);
-						send(replyMessage, getNodeIndex(requester), false);
+						// Send reply to Pk
+						if (requester.equals(localName)) {
+							// Pk is self
+							TimeStampedMessage selfReplyMessage = new TimeStampedMessage(message);
+							selfReplyMessage.setMeCommand(MutualExclusionCommand.REPLY);
+							receiveBuffer.add(selfReplyMessage);
+						} else {
+							// Pk is other
+							TimeStampedMessage replyMessage = new TimeStampedMessage(requester, "REPLY", "REPLY");
+							replyMessage.setMeCommand(MutualExclusionCommand.REPLY);
+							send(replyMessage, getNodeIndex(requester), false);
+						}
 						meVoted = true;
 					} else {
 						meVoted = false;
