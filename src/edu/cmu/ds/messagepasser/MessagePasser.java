@@ -58,7 +58,7 @@ public class MessagePasser {
 	private int loggerPort;
 	private ClockService clockService = null;
 	private TreeMap<String, VectorClock> clockServiceGroups = new TreeMap<String, VectorClock>();
-	private TreeMap<String, List<String>> groupMembers = null;
+	private TreeMap<String, ArrayList<String>> groupMembers = null;
 	private int multicastSequenceNumber = 0; // First sequence number is 1
 
 	/*
@@ -87,6 +87,7 @@ public class MessagePasser {
 		this.loggerPort = parser.getLoggerPort();
 		this.localNode = parser.getLocalNode();
 		this.groupMembers = parser.getGroupMembers();
+		this.localNodeIndex = parser.getLocalNodeIndex();
 
 		if (this.useLogicalClock) {
 			clockService = new LogicalClock();
@@ -120,9 +121,9 @@ public class MessagePasser {
 		System.out.println("Total nodes = " + allNodeList.size());
 
 		// List all groups and their members
-		Iterator<Entry<String, List<String>>> iter = groupMembers.entrySet().iterator();
+		Iterator<Entry<String, ArrayList<String>>> iter = groupMembers.entrySet().iterator();
 		while (iter.hasNext()) {
-			Entry<String, List<String>> group = iter.next();
+			Entry<String, ArrayList<String>> group = iter.next();
 			System.out.print(group.getKey() + ": " + group.getValue().toString());
 			if (group.getValue().contains(localName)) {
 				// Indicate a group that contains this node
@@ -152,11 +153,11 @@ public class MessagePasser {
 		}
 	}
 
-	public Map<String, List<String>> getGroupMembers() {
+	public Map<String, ArrayList<String>> getGroupMembers() {
 		return groupMembers;
 	}
 
-	public List<String> getGroupMembers(String groupName) {
+	public ArrayList<String> getGroupMembers(String groupName) {
 		return groupMembers.get(groupName);
 	}
 
@@ -489,8 +490,7 @@ public class MessagePasser {
 					if (!requestQueue.isEmpty()) {
 						TimeStampedMessage requestMessage = requestQueue.poll();
 						String requester = requestMessage.getMulticasterName();
-						TimeStampedMessage replyMessage = new TimeStampedMessage();
-						replyMessage.setDestination(requester);
+						TimeStampedMessage replyMessage = new TimeStampedMessage(requester, "REPLY", "REPLY");
 						replyMessage.setMeCommand(MutualExclusionCommand.REPLY);
 						send(replyMessage, getNodeIndex(requester), false);
 						meVoted = true;

@@ -17,12 +17,12 @@ import edu.cmu.ds.messagepasser.model.Rule;
 public class ConfigFileParser {
 
 	private Node loggerNode;
-	private List<Node> allNodes = new ArrayList<Node>();
-	private List<Node> peerNodes = new ArrayList<Node>();
-	private List<Rule> sendRules, receiveRules;
+	private ArrayList<Node> allNodes = new ArrayList<Node>();
+	private ArrayList<Node> peerNodes = new ArrayList<Node>();
+	private ArrayList<Rule> sendRules, receiveRules;
 	private Node localNode;
 	private Integer localNodeIndex = 0;
-	private TreeMap<String, List<String>> groupMembers = new TreeMap<String, List<String>>();
+	private TreeMap<String, ArrayList<String>> groupMembers = new TreeMap<String, ArrayList<String>>();
 
 	@SuppressWarnings("unchecked")
 	public ConfigFileParser(String configurationFileName, String localName) throws FileNotFoundException {
@@ -52,7 +52,7 @@ public class ConfigFileParser {
 		for (Object c : configurationList) {
 			Map<String, Object> configEntry = (Map<String, Object>) c;
 			Node node = new Node(configEntry.get("name").toString(), configEntry.get("ip").toString(), new Integer(
-					configEntry.get("port").toString()), (List<String>) configEntry.get("memberOf"));
+					configEntry.get("port").toString()), (ArrayList<String>) configEntry.get("memberOf"));
 			if (!configEntry.get("name").equals(localName)) {
 				peerNodes.add(node);
 			} else {
@@ -75,7 +75,7 @@ public class ConfigFileParser {
 		for (Object g : groupList) {
 			Map<String, Object> groupEntry = (Map<String, Object>) g;
 			String name = groupEntry.get("name").toString();
-			List<String> members = (List<String>) groupEntry.get("members");
+			ArrayList<String> members = (ArrayList<String>) groupEntry.get("members");
 			groupMembers.put(name, members);
 		}
 	}
@@ -166,7 +166,7 @@ public class ConfigFileParser {
 		return receiveRules;
 	}
 
-	public TreeMap<String, List<String>> getGroupMembers() {
+	public TreeMap<String, ArrayList<String>> getGroupMembers() {
 		return groupMembers;
 	}
 }

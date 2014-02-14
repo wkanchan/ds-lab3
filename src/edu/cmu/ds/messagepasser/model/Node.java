@@ -7,12 +7,12 @@ public class Node {
 	private String name;
 	private String ip;
 	private Integer port;
-	private List<String> memberOf = new ArrayList<String>();
+	private ArrayList<String> memberOf = new ArrayList<String>();
 
 	public Node() {
 	}
 
-	public Node(String name, String ip, Integer port, List<String> memberOf) {
+	public Node(String name, String ip, Integer port, ArrayList<String> memberOf) {
 		this.name = name;
 		this.ip = ip;
 		this.port = port;
@@ -43,11 +43,11 @@ public class Node {
 		this.port = port;
 	}
 	
-	public void setMemberOf(List<String> memberOf) {
+	public void setMemberOf(ArrayList<String> memberOf) {
 		this.memberOf = memberOf;
 	}
 	
-	public List<String> getMemberOf() {
+	public ArrayList<String> getMemberOf() {
 		return memberOf;
 	}
 
