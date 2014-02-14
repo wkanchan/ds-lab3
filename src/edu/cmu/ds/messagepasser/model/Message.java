@@ -14,8 +14,6 @@ public class Message implements Serializable {
 	protected String source;
 	protected Integer sequenceNumber;
 	protected boolean isDuplicate;
-	public static final int MULTICAST_MSG_MULTICASTER_NAME_INDEX = 3;
-	public static final int MULTICAST_MSG_GROUP_NAME_INDEX = 5;
 
 	/**
 	 * Create an empty message

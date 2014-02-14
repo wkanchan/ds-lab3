@@ -8,6 +8,7 @@ import edu.cmu.ds.messagepasser.model.TimeStampedMessage;
 
 public class DSLab {
 
+	private final static String COMMAND_GUIDE = "Please enter a command (send/exit/mark/multicast/time/status/request/release)";
 	private static final String DEFAULT_CONFIG_FILENAME = "config.yaml";
 
 	public static void main(String[] args) throws Exception {
@@ -44,7 +45,7 @@ public class DSLab {
 			}
 		}
 
-		System.out.println("Please enter a command (send/exit/mark/multicast/time)");
+		System.out.println(COMMAND_GUIDE);
 		System.out.print(MessagePasser.commandPrompt);
 		String command;
 		while ((command = input.readLine()) != null) {
@@ -58,6 +59,21 @@ public class DSLab {
 				 * Time - Print current time stamp
 				 */
 				messagePasser.printTimeStamp();
+			} else if (command.equals("status")) {
+				/*
+				 * Status - Print current mutual exclusion status
+				 */
+				messagePasser.printMutualExclusionStatus();
+			} else if (command.equals("request")) {
+				/*
+				 * Request - Request a right to enter critical section
+				 */
+				messagePasser.request();
+			} else if (command.equals("release")) {
+				/*
+				 * Release - Announce release of critical section
+				 */
+				messagePasser.release();
 			} else if (command.equals("send")) {
 				/*
 				 * Send
@@ -103,14 +119,6 @@ public class DSLab {
 						messagePasser.log(message);
 					}
 				}
-			} else if (command.equals("mark")) {
-				/*
-				 * Mark: send a message only to logger.
-				 */
-				TimeStampedMessage message = new TimeStampedMessage("logger", "log", "Mark");
-				message.setSource(localName);
-				message.setSequenceNumber(Integer.MAX_VALUE);
-				messagePasser.mark(message);
 			} else if (command.equals("multicast")) {
 				/*
 				 * Multicast
@@ -143,9 +151,17 @@ public class DSLab {
 						messagePasser.log(message);
 					}
 				}
+			} else if (command.equals("mark")) {
+				/*
+				 * Mark: send a message only to logger.
+				 */
+				TimeStampedMessage message = new TimeStampedMessage("logger", "log", "Mark");
+				message.setSource(localName);
+				message.setSequenceNumber(Integer.MAX_VALUE);
+				messagePasser.mark(message);
 			}
 			System.out.println("-------------------");
-			System.out.println("Please enter a command (send/exit/mark/multicast/time)");
+			System.out.println(COMMAND_GUIDE);
 			System.out.print(MessagePasser.commandPrompt);
 		}
 		input.close();

@@ -5,9 +5,9 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 import org.yaml.snakeyaml.Yaml;
 
@@ -22,7 +22,7 @@ public class ConfigFileParser {
 	private List<Rule> sendRules, receiveRules;
 	private Node localNode;
 	private Integer localNodeIndex = 0;
-	private Map<String, List<String>> groupMembers = new HashMap<String, List<String>>();
+	private TreeMap<String, List<String>> groupMembers = new TreeMap<String, List<String>>();
 
 	@SuppressWarnings("unchecked")
 	public ConfigFileParser(String configurationFileName, String localName) throws FileNotFoundException {
@@ -31,9 +31,9 @@ public class ConfigFileParser {
 		Yaml yaml = new Yaml();
 		Map<String, Object> configMap = (Map<String, Object>) yaml.load(input);
 
-		setUpNodes(configMap, localName);
-		setUpGroups(configMap);
-		setUpLogger(configMap);
+		parseNodes(configMap, localName);
+		parseGroups(configMap);
+		parseLogger(configMap);
 		sendRules = parseRules(configMap, "sendRules");
 		receiveRules = parseRules(configMap, "receiveRules");
 
@@ -46,13 +46,13 @@ public class ConfigFileParser {
 	 * @param localName
 	 */
 	@SuppressWarnings("unchecked")
-	private void setUpNodes(Map<String, Object> configMap, String localName) {
+	private void parseNodes(Map<String, Object> configMap, String localName) {
 		List<Object> configurationList = (List<Object>) configMap.get("configuration");
 		int nodeIndex = 0;
 		for (Object c : configurationList) {
 			Map<String, Object> configEntry = (Map<String, Object>) c;
 			Node node = new Node(configEntry.get("name").toString(), configEntry.get("ip").toString(), new Integer(
-					configEntry.get("port").toString()));
+					configEntry.get("port").toString()), (List<String>) configEntry.get("memberOf"));
 			if (!configEntry.get("name").equals(localName)) {
 				peerNodes.add(node);
 			} else {
@@ -70,7 +70,7 @@ public class ConfigFileParser {
 	 * @param configMap
 	 */
 	@SuppressWarnings("unchecked")
-	private void setUpGroups(Map<String, Object> configMap) {
+	private void parseGroups(Map<String, Object> configMap) {
 		List<Object> groupList = (List<Object>) configMap.get("groups");
 		for (Object g : groupList) {
 			Map<String, Object> groupEntry = (Map<String, Object>) g;
@@ -86,11 +86,12 @@ public class ConfigFileParser {
 	 * @param configMap
 	 */
 	@SuppressWarnings("unchecked")
-	private void setUpLogger(Map<String, Object> configMap) {
+	private void parseLogger(Map<String, Object> configMap) {
 		List<Object> loggerList = (List<Object>) configMap.get("logger");
 		if (loggerList != null && !loggerList.isEmpty()) {
 			Map<String, Object> loggerEntry = (Map<String, Object>) loggerList.get(0);
-			loggerNode = new Node("", loggerEntry.get("ip").toString(), new Integer(loggerEntry.get("port").toString()));
+			loggerNode = new Node("", loggerEntry.get("ip").toString(),
+					new Integer(loggerEntry.get("port").toString()), null);
 		} else {
 			throw new RuntimeException("Cannot find config for logger");
 		}
@@ -144,7 +145,7 @@ public class ConfigFileParser {
 	public List<Node> getPeerNodes() {
 		return peerNodes;
 	}
-	
+
 	public List<Node> getAllNodes() {
 		return allNodes;
 	}
@@ -165,7 +166,7 @@ public class ConfigFileParser {
 		return receiveRules;
 	}
 
-	public Map<String, List<String>> getGroupMembers() {
+	public TreeMap<String, List<String>> getGroupMembers() {
 		return groupMembers;
 	}
 }

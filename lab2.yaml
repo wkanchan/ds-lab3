@@ -4,50 +4,23 @@ configuration :
     port : 11111
     memberOf :
       - group1
-      - group4
-      - group6
   - name : bob
     ip   : 127.0.0.1
     port : 12222
     memberOf :
       - group2
       - group1
-      - group5
   - name : charlie
     ip   : 127.0.0.1
     port : 13333
     memberOf :
-      - group3
       - group1
-      - group7
+      - group2
   - name : david
     ip   : 127.0.0.1
     port : 14444
     memberOf :
-      - group4
       - group2
-      - group7
-  - name : elephant
-    ip   : 127.0.0.1
-    port : 15555
-    memberOf :
-      - group5
-      - group3
-      - group4
-  - name : fox
-    ip   : 127.0.0.1
-    port : 16666
-    memberOf :
-      - group6
-      - group2
-      - group3
-  - name : giraffe
-    ip   : 127.0.0.1
-    port : 17777
-    memberOf :
-      - group7
-      - group5
-      - group6
 
 groups :
   - name : group1
@@ -58,33 +31,8 @@ groups :
   - name : group2
     members :
       - bob
-      - david
-      - fox
-  - name : group3
-    members :
-      - charlie
-      - elephant
-      - fox
-  - name : group4
-    members :
-      - alice
-      - david
-      - elephant
-  - name : group5
-    members :
-      - bob
-      - elephant
-      - giraffe
-  - name : group6
-    members :
-      - alice
-      - fox
-      - giraffe
-  - name : group7
-    members :
       - charlie
       - david
-      - giraffe
 
 logger :
   - ip : 127.0.0.1

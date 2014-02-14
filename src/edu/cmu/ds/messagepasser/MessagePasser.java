@@ -16,6 +16,10 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.PriorityQueue;
+import java.util.Queue;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -23,6 +27,8 @@ import edu.cmu.ds.messagepasser.clock.ClockService;
 import edu.cmu.ds.messagepasser.clock.LogicalClock;
 import edu.cmu.ds.messagepasser.clock.VectorClock;
 import edu.cmu.ds.messagepasser.model.Message;
+import edu.cmu.ds.messagepasser.model.MutualExclusionCommand;
+import edu.cmu.ds.messagepasser.model.MutualExclusionState;
 import edu.cmu.ds.messagepasser.model.Node;
 import edu.cmu.ds.messagepasser.model.Rule;
 import edu.cmu.ds.messagepasser.model.TimeStampedMessage;
@@ -46,22 +52,30 @@ public class MessagePasser {
 	private Map<String, ObjectOutputStream> clientOutputPool = new HashMap<String, ObjectOutputStream>();
 	private boolean willTerminate = false;
 	private boolean useLogicalClock;
+	private Node localNode;
 	private int localNodeIndex;
-	private int localPort;
-	private String localIp = null;
 	private String loggerIp = null;
 	private int loggerPort;
 	private ClockService clockService = null;
-	private Map<String, VectorClock> clockServiceGroups = new HashMap<String, VectorClock>();
-	private Map<String, List<String>> groupMembers = null;
-	// First multicast message's sequence number will be 1
-	private int multicastSequenceNumber = 0;
+	private TreeMap<String, VectorClock> clockServiceGroups = new TreeMap<String, VectorClock>();
+	private TreeMap<String, List<String>> groupMembers = null;
+	private int multicastSequenceNumber = 0; // First sequence number is 1
 
-	public MessagePasser(String inConfigurationFilename, String inLocalName, boolean inUseLogicalClock)
+	/*
+	 * Maekawa's algorithm for mutual exclusion
+	 */
+	private int messagesReceivedCount;
+	private int messagesSentCount;
+	private MutualExclusionState meState = MutualExclusionState.RELEASED;
+	private boolean meVoted = false;
+	private Queue<TimeStampedMessage> requestQueue = new PriorityQueue<TimeStampedMessage>();
+	private Set<String> nodeRepliedSet = new HashSet<String>();
+
+	public MessagePasser(String configurationFilename, String localName, boolean useLogicalClock)
 			throws FileNotFoundException {
-		this.configurationFileName = inConfigurationFilename;
-		this.localName = inLocalName;
-		this.useLogicalClock = inUseLogicalClock;
+		this.configurationFileName = configurationFilename;
+		this.localName = localName;
+		this.useLogicalClock = useLogicalClock;
 
 		ConfigFileParser parser;
 		parser = new ConfigFileParser(this.configurationFileName, this.localName);
@@ -71,9 +85,7 @@ public class MessagePasser {
 		this.sendRuleList = parser.getSendRules();
 		this.loggerIp = parser.getLoggerIp();
 		this.loggerPort = parser.getLoggerPort();
-		this.localNodeIndex = parser.getLocalNodeIndex();
-		this.localPort = parser.getLocalNode().getPort();
-		this.localIp = parser.getLocalNode().getIp();
+		this.localNode = parser.getLocalNode();
 		this.groupMembers = parser.getGroupMembers();
 
 		if (this.useLogicalClock) {
@@ -86,7 +98,7 @@ public class MessagePasser {
 			}
 		}
 		try {
-			this.listenerSocket = new ServerSocket(this.localPort);
+			this.listenerSocket = new ServerSocket(this.localNode.getPort());
 			startListenerThread(); // setUp the initial connection
 			startMessageReceiverThread(); // create receive
 		} catch (IOException e) {
@@ -99,24 +111,40 @@ public class MessagePasser {
 	 * Print all MessagePasser's information
 	 */
 	public void printInfo() {
-		System.out.println("Local name is " + localName);
-		System.out.println("Total number of node is " + this.allNodeList.size());
-		System.out.println("Local node index is " + localNodeIndex);
 		if (useLogicalClock)
-			System.out.println("Using logical clock");
+			System.out.println("<Logical clock>");
 		else
-			System.out.println("Using vector clock");
+			System.out.println("<Vector clock>");
+		System.out.println("Name = " + localName);
+		System.out.println("Node index = " + localNodeIndex);
+		System.out.println("Total nodes = " + allNodeList.size());
 
 		// List all groups and their members
 		Iterator<Entry<String, List<String>>> iter = groupMembers.entrySet().iterator();
 		while (iter.hasNext()) {
 			Entry<String, List<String>> group = iter.next();
-			System.out.println(group.getKey() + ": " + group.getValue().toString());
+			System.out.print(group.getKey() + ": " + group.getValue().toString());
+			if (group.getValue().contains(localName)) {
+				// Indicate a group that contains this node
+				System.out.println(" <==");
+			} else {
+				System.out.println();
+			}
 		}
 	}
 
+	public void printMutualExclusionStatus() {
+		System.out.println("# messages sent = " + messagesSentCount);
+		System.out.println("# messages received = " + messagesReceivedCount);
+		System.out.println("state = " + meState);
+		System.out.println("voted = " + meVoted);
+	}
+
+	/**
+	 * Print current time stamp
+	 */
 	public void printTimeStamp() {
-		System.out.println(localName + " time stamp: " + clockService.getTimeStamp());
+		System.out.println(localName + " main time stamp: " + clockService.getTimeStamp());
 		Iterator<Entry<String, VectorClock>> iter = clockServiceGroups.entrySet().iterator();
 		while (iter.hasNext()) {
 			Entry<String, VectorClock> entry = iter.next();
@@ -212,7 +240,7 @@ public class MessagePasser {
 		if (includeSelf) {
 			// Increment timestamp
 			groupClock.incrementAndGetTimeStamp();
-			printTimeStamp();
+//			printTimeStamp();
 		}
 
 		/*
@@ -229,6 +257,7 @@ public class MessagePasser {
 			newMessage.setTimeStamp(groupClock.getTimeStamp());
 			handleReceiveMulticastMessage(newMessage);
 		}
+		// Multicast to other nodes than itself
 		for (String nodeName : destinationNodeNames) {
 			if (!nodeName.equals(localName)) {
 				TimeStampedMessage newMessage = new TimeStampedMessage(message);
@@ -264,7 +293,7 @@ public class MessagePasser {
 		 */
 		if (!isMulticastMessage) {
 			message.setTimeStamp(clockService.incrementAndGetTimeStamp());
-			printTimeStamp();
+//			printTimeStamp();
 		}
 
 		// Get a connection
@@ -285,7 +314,6 @@ public class MessagePasser {
 			System.out.println("Couldn't connect to " + message.getDestination() + " | " + e);
 			return;
 		}
-
 
 		// If this is an ordinary message, increase and get sequence number
 		// Then assign it to the message
@@ -328,11 +356,13 @@ public class MessagePasser {
 		try {
 			ot.writeObject(message);
 			ot.flush();
+			messagesSentCount++;
 			if (willDuplicate) {
 				TimeStampedMessage newMessage = new TimeStampedMessage(message);
 				newMessage.setIsDuplicate(true);
 				ot.writeObject(newMessage);
 				ot.flush();
+				messagesSentCount++;
 			}
 		} catch (Exception e) {
 			// Remove socket and outputStream from pools if they are broken
@@ -371,6 +401,7 @@ public class MessagePasser {
 				}
 				ot.writeObject(delayedMessage);
 				ot.flush();
+				messagesSentCount++;
 			} catch (Exception e) {
 				System.out.println("Couldn't send a delayed message to " + delayedMessage.getDestination() + " | " + e);
 				return;
@@ -379,13 +410,106 @@ public class MessagePasser {
 	}
 
 	/**
+	 * Mutual exclusion: Request to enter critical section
+	 */
+	public void request() {
+		switch (meState) {
+		case WANTED:
+			System.out.println("Error: You have another pending request.");
+			return;
+		case HELD:
+			System.out.println("Error: You are holding the critical section!");
+			return;
+		case RELEASED:
+			meState = MutualExclusionState.WANTED;
+			nodeRepliedSet.clear();
+			printMutualExclusionStatus();
+			TimeStampedMessage requestMessage = new TimeStampedMessage();
+			requestMessage.setSource(localName);
+			requestMessage.setMeCommand(MutualExclusionCommand.REQUEST);
+			requestMessage.setMulticastMessageBody(localNode.getMemberOf().get(0), getIncMulticastSequenceNumber());
+			multicast(localNode.getMemberOf().get(0), requestMessage, true);
+		}
+	}
+
+	/**
+	 * Mutual exclusion: Release
+	 */
+	public void release() {
+		switch (meState) {
+		case RELEASED:
+		case WANTED:
+			System.out.println("Error: You are not holding the critical section.");
+			return;
+		case HELD:
+			meState = MutualExclusionState.RELEASED;
+			TimeStampedMessage releaseMessage = new TimeStampedMessage();
+			releaseMessage.setSource(localName);
+			releaseMessage.setMeCommand(MutualExclusionCommand.RELEASE);
+			releaseMessage.setMulticastMessageBody(localNode.getMemberOf().get(0), getIncMulticastSequenceNumber());
+			multicast(localNode.getMemberOf().get(0), releaseMessage, true);
+		}
+	}
+
+	/**
 	 * Deliver a message from the receiveBuffer to the screen
 	 */
 	private void receive() {
-		if (receiveBuffer.peek() != null) {
+		if (!receiveBuffer.isEmpty()) {
+			messagesReceivedCount++;
 			TimeStampedMessage message = receiveBuffer.poll();
 			System.out.println("\n\nDelivered message from " + message.getSource());
 			System.out.println(message);
+
+			if (message.getMeCommand() != null) {
+				switch (message.getMeCommand()) {
+				case REQUEST:
+					/*
+					 * Received REQUEST
+					 */
+					if (meState == MutualExclusionState.HELD || meVoted) {
+						requestQueue.add(message);
+					} else {
+						if (message.getMulticasterName().equals(localName)) {
+							TimeStampedMessage selfReplyMessage = new TimeStampedMessage(message);
+							selfReplyMessage.setMeCommand(MutualExclusionCommand.REPLY);
+							receiveBuffer.add(selfReplyMessage);
+						} else {
+							TimeStampedMessage replyMessage = new TimeStampedMessage(message.getMulticasterName(), "REPLY", "REPLY");
+							replyMessage.setMeCommand(MutualExclusionCommand.REPLY);
+							send(replyMessage, getNodeIndex(message.getMulticasterName()), false);
+						}
+						meVoted = true;
+					}
+					break;
+				case RELEASE:
+					/*
+					 * Received RELEASE
+					 */
+					if (!requestQueue.isEmpty()) {
+						TimeStampedMessage requestMessage = requestQueue.poll();
+						String requester = requestMessage.getMulticasterName();
+						TimeStampedMessage replyMessage = new TimeStampedMessage();
+						replyMessage.setDestination(requester);
+						replyMessage.setMeCommand(MutualExclusionCommand.REPLY);
+						send(replyMessage, getNodeIndex(requester), false);
+						meVoted = true;
+					} else {
+						meVoted = false;
+					}
+					break;
+				case REPLY:
+					/*
+					 * Received REPLY
+					 */
+					nodeRepliedSet.add(message.getSource());
+					if (nodeRepliedSet.size() == groupMembers.get(localNode.getMemberOf().get(0)).size()) {
+						meState = MutualExclusionState.HELD;
+						printMutualExclusionStatus();
+					}
+				}
+			}
+
 			System.out.print(commandPrompt);
 		}
 	}
@@ -595,7 +719,7 @@ public class MessagePasser {
 		receiveBuffer.add(message);
 		// Increment timestamp
 		clockService.updateTime(message.getTimeStamp());
-		printTimeStamp();
+//		printTimeStamp();
 		// Duplicate the message and deliver it
 		if (mustDuplicate) {
 			TimeStampedMessage duplicateMessage = new TimeStampedMessage(message);
@@ -603,14 +727,14 @@ public class MessagePasser {
 			receiveBuffer.add(duplicateMessage);
 			// Increment timestamp
 			clockService.updateTime(message.getTimeStamp());
-			printTimeStamp();
+//			printTimeStamp();
 		}
 		// Deliver delayed messages
 		while (!receiveDelayedBuffer.isEmpty()) {
 			receiveBuffer.add(receiveDelayedBuffer.poll());
 			// Increment timestamp
 			clockService.updateTime(message.getTimeStamp());
-			printTimeStamp();
+//			printTimeStamp();
 		}
 		System.out.print(commandPrompt);
 	}
@@ -624,13 +748,11 @@ public class MessagePasser {
 			public void run() {
 				System.out.println("Local server is listening on port " + listenerSocket.getLocalPort());
 
-				Socket socket_local;
-				ObjectOutputStream ot_temp;
 				try {
-					socket_local = new Socket(localIp, localPort);
-					ot_temp = new ObjectOutputStream(socket_local.getOutputStream());
-					clientSocketPool.put(localName, socket_local);
-					clientOutputPool.put(localName, ot_temp);
+					Socket socket = new Socket(localNode.getIp(), localNode.getPort());
+					ObjectOutputStream ot = new ObjectOutputStream(socket.getOutputStream());
+					clientSocketPool.put(localName, socket);
+					clientOutputPool.put(localName, ot);
 				} catch (UnknownHostException e1) {
 					e1.printStackTrace();
 				} catch (IOException e1) {
